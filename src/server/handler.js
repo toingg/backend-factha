@@ -24,10 +24,10 @@ const hashPassword = async (password) => {
 };
 
 // functiion to make id always unique generated
-const isUniqueId = async (id, connection) => {
+const isUniqueId = async (userId, connection) => {
   const [results] = await connection.execute(
-    "SELECT id FROM users WHERE id = ?",
-    [id]
+    "SELECT userId FROM users WHERE userId = ?",
+    [userId]
   );
   return results.length === 0;
 };
@@ -54,23 +54,23 @@ const registerHandler = async (request, h) => {
     }
 
     // Generate a unique ID
-    let id;
+    let userId;
     do {
-      id = nanoid(16);
-    } while (!(await isUniqueId(id, connection)));
+      userId = nanoid(16);
+    } while (!(await isUniqueId(userId, connection)));
 
     const hashedPassword = await hashPassword(password);
 
     await connection.execute(
-      "INSERT INTO users (id, name, email, password) VALUES (?, ?, ?, ?)",
-      [id, name, email, hashedPassword]
+      "INSERT INTO users (userId, name, email, password) VALUES (?, ?, ?, ?)",
+      [userId, name, email, hashedPassword]
     );
 
     const response = h.response({
       status: "success",
       message: "User registered successfully!",
       data: {
-        userId: id,
+        userId: userId,
         name: name,
         email: email,
       },
@@ -110,7 +110,7 @@ const loginHandler = async (request, h) => {
       if (isPasswordValid) {
         // Generate JWT
         const token = jwt.sign(
-          { id: user.id, email: user.email, name: user.name },
+          { userId: user.id, email: user.email, name: user.name },
           JWT_SECRET,
           { expiresIn: "1h" } // Token expires in 1 hour
         );
@@ -119,7 +119,7 @@ const loginHandler = async (request, h) => {
           status: "success",
           message: "Login successfully!",
           data: {
-            id: user.id,
+            userId: user.userId,
             name: user.name,
             token: token,
           },
@@ -275,6 +275,9 @@ const addBookHandler = (request, h) => {
 };
 
 // News Handler
+const addNewsHandler = async (request, h) => {
+
+}
 
 
 module.exports = { registerHandler, loginHandler, postPredictHandler, addBookHandler };
