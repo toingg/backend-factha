@@ -10,8 +10,8 @@ const {
   predictValidity,
 } = require("../services/inferenceService");
 
-const books = require('./books');
-const { verifyToken } = require('./middleware');
+const books = require("./books");
+const { verifyToken } = require("./middleware");
 
 require("dotenv").config();
 
@@ -210,13 +210,22 @@ const postPredictHandler = async (request, h) => {
 
 // test jwt handler
 const addBookHandler = (request, h) => {
-  const { name, year, author, summary, publisher, pageCount, readPage, reading } = request.payload;
+  const {
+    name,
+    year,
+    author,
+    summary,
+    publisher,
+    pageCount,
+    readPage,
+    reading,
+  } = request.payload;
   // const userId = request.auth.id; // Assuming you want to store the user's ID with the book
 
   if (!name) {
     const response = h.response({
-      status: 'fail',
-      message: 'Gagal menambahkan buku. Mohon isi nama buku',
+      status: "fail",
+      message: "Gagal menambahkan buku. Mohon isi nama buku",
     });
     response.code(400);
     return response;
@@ -224,8 +233,9 @@ const addBookHandler = (request, h) => {
 
   if (readPage > pageCount) {
     const response = h.response({
-      status: 'fail',
-      message: 'Gagal menambahkan buku. readPage tidak boleh lebih besar dari pageCount',
+      status: "fail",
+      message:
+        "Gagal menambahkan buku. readPage tidak boleh lebih besar dari pageCount",
     });
     response.code(400);
     return response;
@@ -257,8 +267,8 @@ const addBookHandler = (request, h) => {
 
   if (isSuccess) {
     const response = h.response({
-      status: 'success',
-      message: 'Buku berhasil ditambahkan',
+      status: "success",
+      message: "Buku berhasil ditambahkan",
       data: {
         bookId: id,
       },
@@ -267,8 +277,8 @@ const addBookHandler = (request, h) => {
     return response;
   }
   const response = h.response({
-    status: 'fail',
-    message: 'Gagal menambahkan buku. Kesalahan pada Server',
+    status: "fail",
+    message: "Gagal menambahkan buku. Kesalahan pada Server",
   });
   response.code(500);
   return response;
@@ -276,8 +286,57 @@ const addBookHandler = (request, h) => {
 
 // News Handler
 const addNewsHandler = async (request, h) => {
+  try {
+    const { title, tags, body } = request.payload;
 
-}
+    const connection = await mysql.createConnection(dbConfig);
 
+    let id;
+    do {
+      id = nanoid(21);
+    } while (!(await isUniqueId(id, connection)));
+    const createdAt = new Date().toISOString();
+    const updatedAt = createdAt;
 
-module.exports = { registerHandler, loginHandler, postPredictHandler, addBookHandler };
+    const newNews = {
+      id,
+      title,
+      tags: JSON.stringify(tags),
+      body,
+      createdAt,
+      updatedAt,
+    };
+
+    await connection.execute(
+      "INSERT INTO news (id, title, tags, body, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
+      [id, title, JSON.stringify(tags), body, createdAt, updatedAt]
+    );
+
+    await connection.end();
+    const response = h.response({
+      status: "success",
+      message: "Berita berhasil ditambahkan!",
+      data: {
+        news: newNews
+      },
+    });
+    response.code(201);
+    return response;
+  } catch (error) {
+    // Tangkap error untuk mendapatkan pesan kesalahan
+    const response = h.response({
+      status: "fail",
+      message: `Berita gagal ditambahkan! : ${error.message}`,
+    });
+    response.code(500);
+    return response;
+  }
+};
+
+module.exports = {
+  registerHandler,
+  loginHandler,
+  postPredictHandler,
+  addBookHandler,
+  addNewsHandler,
+};

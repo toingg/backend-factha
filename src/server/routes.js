@@ -2,11 +2,11 @@ const {
   registerHandler,
   loginHandler,
   postPredictHandler,
-  addBookHandler
+  addBookHandler,
+  addNewsHandler,
 } = require("../server/handler");
 
-
-const { verifyToken } = require('./middleware'); 
+const { verifyToken } = require("./middleware");
 
 const routes = [
   {
@@ -35,8 +35,8 @@ const routes = [
   },
 
   {
-    method: 'POST',
-    path: '/books',
+    method: "POST",
+    path: "/books",
     handler: addBookHandler,
     options: {
       pre: [{ method: verifyToken }],
@@ -44,6 +44,12 @@ const routes = [
   },
 
   // NEWS ROUTES
+  // POST BERITA
+  {
+    method: "POST",
+    path: "/news",
+    handler: addNewsHandler,
+  },
   // Get all news
   // {
   //   method: "GET",
@@ -66,7 +72,6 @@ const routes = [
   //   path: "/news",
   //   // handler:
   // },
-
 ];
 
 module.exports = routes;
