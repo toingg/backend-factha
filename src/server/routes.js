@@ -49,6 +49,9 @@ const routes = [
     method: "POST",
     path: "/news",
     handler: addNewsHandler,
+    options: {
+      pre: [{method: verifyToken}],
+    }
   },
   // Get all news
   // {
