@@ -2,7 +2,6 @@ const {
   registerHandler,
   loginHandler,
   postPredictHandler,
-  addBookHandler,
   addNewsHandler,
   getNewsHandler,
   getNewsByIdHandler,
@@ -34,15 +33,6 @@ const routes = [
     method: "POST",
     path: "/login",
     handler: loginHandler,
-  },
-
-  {
-    method: "POST",
-    path: "/books",
-    handler: addBookHandler,
-    options: {
-      pre: [{ method: verifyToken }],
-    },
   },
 
   // NEWS ROUTES
