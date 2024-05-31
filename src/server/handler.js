@@ -317,16 +317,72 @@ const addNewsHandler = async (request, h) => {
       status: "success",
       message: "Berita berhasil ditambahkan!",
       data: {
-        news: newNews
+        news: newNews,
       },
     });
     response.code(201);
     return response;
   } catch (error) {
-    // Tangkap error untuk mendapatkan pesan kesalahan
     const response = h.response({
       status: "fail",
       message: `Berita gagal ditambahkan! : ${error.message}`,
+    });
+    response.code(500);
+    return response;
+  }
+};
+
+const getNewsHandler = async (request, h) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    const [allNews] = await connection.execute("SELECT * FROM news");
+    await connection.end();
+
+    const response = h.response({
+      newsData: allNews,
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: `Berita gagal didapatkan! : ${error.message}`,
+    });
+    response.code(500);
+    return response;
+  }
+};
+
+const getNewsByIdHandler = async (request, h) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    const { id } = request.params;
+
+    const [newsDataById] = await connection.execute("SELECT * FROM news WHERE id = ?", [id]);
+
+    await connection.end();
+
+    if (newsDataById.length === 0) {
+      const response = h.response({
+        status: "fail",
+        message: "Berita dengan id tersebut tidak ditemukan!"
+      });
+      response.code(404);
+      return response;
+    }
+
+    const response = h.response({
+      status: "success",
+      newsData: newsDataById,
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: "Terjadi kesalahan pada server"
     });
     response.code(500);
     return response;
@@ -339,4 +395,6 @@ module.exports = {
   postPredictHandler,
   addBookHandler,
   addNewsHandler,
+  getNewsHandler,
+  getNewsByIdHandler,
 };

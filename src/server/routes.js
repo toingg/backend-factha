@@ -4,6 +4,8 @@ const {
   postPredictHandler,
   addBookHandler,
   addNewsHandler,
+  getNewsHandler,
+  getNewsByIdHandler,
 } = require("../server/handler");
 
 const { verifyToken } = require("./middleware");
@@ -44,11 +46,28 @@ const routes = [
   },
 
   // NEWS ROUTES
+  
   // POST BERITA
   {
     method: "POST",
     path: "/news",
     handler: addNewsHandler,
+    options: {
+      pre: [{method: verifyToken}],
+    }
+  },
+  {
+    method: "GET",
+    path: "/news",
+    handler: getNewsHandler,
+    options: {
+      pre: [{method: verifyToken}],
+    }
+  },
+  {
+    method: "GET",
+    path: "/news/{id}",
+    handler: getNewsByIdHandler,
     options: {
       pre: [{method: verifyToken}],
     }
