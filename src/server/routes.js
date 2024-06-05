@@ -5,6 +5,8 @@ const {
   addNewsHandler,
   getNewsHandler,
   getNewsByIdHandler,
+  editUserByIdHandler,
+  getAllUsers,
 } = require("../server/handler");
 
 const { verifyToken } = require("./middleware");
@@ -34,6 +36,22 @@ const routes = [
     path: "/login",
     handler: loginHandler,
   },
+  {
+    method: "GET",
+    path: "/users",
+    handler: getAllUsers,
+    options: {
+      pre: [{ method: verifyToken }],
+    },
+  },
+  {
+    method: 'PUT',
+    path: '/users/{id}',
+    handler: editUserByIdHandler,
+    options: {
+      pre: [{ method: verifyToken }],
+    },
+  },
 
   // NEWS ROUTES
 
@@ -62,6 +80,7 @@ const routes = [
       pre: [{ method: verifyToken }],
     },
   },
+  
   // Get all news
   // {
   //   method: "GET",

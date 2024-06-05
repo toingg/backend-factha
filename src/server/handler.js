@@ -10,10 +10,7 @@ require("dotenv").config();
 const { verifyToken } = require("./middleware");
 const { dbConfig } = require("../../config/mySqlconfig");
 const { predictValidity } = require("../services/inferenceService");
-const {
-  storage,
-  bucketName,
-} = require("../../config/gcsConfig");
+const { storage, bucketName } = require("../../config/gcsConfig");
 
 // Function upload to GCS
 // Fungsi upload single object
@@ -123,10 +120,7 @@ const loginHandler = async (request, h) => {
       "SELECT * FROM users WHERE email = ?",
       [email]
     );
-    const [name] = await connection.execute(
-      "SELECT name FROM users WHERE email = ?",
-      [email]
-    );
+
     if (results.length > 0) {
       const user = results[0];
       // console.log(results[0]);
@@ -177,6 +171,100 @@ const loginHandler = async (request, h) => {
   }
 };
 
+const getAllUsers = async (request, h) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    const [allUsers] = await connection.execute("SELECT * FROM users");
+    await connection.end();
+
+    const response = h.response({
+      users: allUsers,
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: `Users gagal didapatkan! : ${error.message}`,
+    });
+    response.code(500);
+    return response;
+  }
+};
+
+const editUserByIdHandler = async (request, h) => {
+  try {
+    const { id } = request.params;
+    const { name, email, oldPassword, newPassword, body, filePath} = request.payload;
+    // filepath for image path for updating user photo profile
+
+    const connection = await mysql.createConnection(dbConfig);
+
+    // const [id] = await connection.execute("SELECT * FROM users");
+    const [userDataById] = await connection.execute(
+      "SELECT * FROM users WHERE userId = ?",
+      [id]
+    );
+
+    // Check userId apakah ada
+    if (userDataById.length === 0) {
+      // Jika tidak ditemukan, kembalikan respons dengan status fail
+      const response = h.response({
+        status: "fail",
+        message:
+          "Gagal memperbarui user. User dengan id tersebut tidak ditemukan",
+      });
+      response.code(404);
+      return response;
+    }
+    // Debugging liat isi if success kalo mau liat isinya pas fail masukin di if userId apakah ada atas ini
+    // console.log(userDataById.length);
+    // console.log(userDataById[0]);
+    const folderName = 'profile-picture'
+
+    const isPasswordValid = await bcrypt.compare(oldPassword, userDataById[0].password);
+    if (isPasswordValid) {
+      const fileName = `${nanoid(12)}-${path.basename(filePath)}`;
+    
+      await upload(bucketName, folderName, fileName, filePath); // Upload only if insertion succeeds
+      const imageUrl = `https://storage.googleapis.com/${bucketName}/${folderName}/${fileName}`;
+      const updatedAt = new Date().toISOString();
+      const hashedPassword = await hashPassword(newPassword);
+      //  Update data user
+      await connection.execute(
+        "UPDATE users SET name = ?, email = ?, password = ?, body = ?, updatedAt = ?, fileName = ?, imgProfileUrl = ? WHERE userId = ?",
+        [name, email, hashedPassword, body, updatedAt, fileName, imageUrl, id]
+      );
+    } else {
+      const response = h.response({
+        status: "fail",
+        message:
+          "Gagal memperbarui user. Password Lama salah !",
+      });
+      response.code(404);
+      return response;
+    }
+
+    await connection.end();
+
+    const response = h.response({
+      status: "success",
+      message: "User profile berhasil diperbarui",
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: "Gagal memperbarui users. Server Error!",
+    });
+    response.code(500);
+    return response;
+  }
+};
+
+
 // News Handler
 
 const addNewsHandler = async (request, h) => {
@@ -191,38 +279,29 @@ const addNewsHandler = async (request, h) => {
     } while (!(await isUniqueId(newsId, connection)));
     const createdAt = new Date().toISOString();
     const updatedAt = createdAt;
-    const folderName = 'thumbnail-news';
+    const folderName = "thumbnail-news";
 
     const newNews = {
       newsId,
       title,
       body,
       createdAt,
-      updatedAt,
     };
 
     const fileName = `${nanoid(12)}-${path.basename(filePath)}`;
 
     const uploadResult = await connection.execute(
       "INSERT INTO news (newsId, user_id, title, body, createdAt, updatedAt, fileName) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [
-        newsId,
-        userId,
-        title,
-        body,
-        createdAt,
-        updatedAt,
-        fileName,
-      ]
+      [newsId, userId, title, body, createdAt, updatedAt, fileName]
     );
     if (uploadResult.affectedRows != 1) {
       await upload(bucketName, folderName, fileName, filePath); // Upload only if insertion succeeds
     }
-    
-    const imageUrl = `https://storage.googleapis.com/${bucketName}/${folderName}/${fileName}`
+
+    const imageUrl = `https://storage.googleapis.com/${bucketName}/${folderName}/${fileName}`;
 
     const uploadImageUrl = await connection.execute(
-      'UPDATE news SET imageUrl = ? WHERE newsId = ?',
+      "UPDATE news SET imageUrl = ? WHERE newsId = ?",
       [imageUrl, newsId]
     );
 
@@ -275,7 +354,7 @@ const getNewsByIdHandler = async (request, h) => {
     const { id } = request.params;
 
     const [newsDataById] = await connection.execute(
-      "SELECT * FROM news WHERE id = ?",
+      "SELECT * FROM news WHERE newsId = ?",
       [id]
     );
 
@@ -364,8 +443,10 @@ const postPredictHandler = async (request, h) => {
 module.exports = {
   registerHandler,
   loginHandler,
-  postPredictHandler,
+  getAllUsers,
+  editUserByIdHandler,
   addNewsHandler,
   getNewsHandler,
   getNewsByIdHandler,
+  postPredictHandler,
 };
