@@ -36,31 +36,31 @@ const routes = [
   },
 
   // NEWS ROUTES
-  
+
   // POST BERITA
   {
     method: "POST",
     path: "/news",
     handler: addNewsHandler,
     options: {
-      pre: [{method: verifyToken}],
-    }
+      pre: [{ method: verifyToken }],
+    },
   },
   {
     method: "GET",
     path: "/news",
     handler: getNewsHandler,
     options: {
-      pre: [{method: verifyToken}],
-    }
+      pre: [{ method: verifyToken }],
+    },
   },
   {
     method: "GET",
     path: "/news/{id}",
     handler: getNewsByIdHandler,
     options: {
-      pre: [{method: verifyToken}],
-    }
+      pre: [{ method: verifyToken }],
+    },
   },
   // Get all news
   // {

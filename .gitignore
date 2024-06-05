@@ -2,3 +2,7 @@
 .env
 package-lock.json
 .vscode
+/sql
+Dockerfile
+.dockerignore
+factha-credentials.json

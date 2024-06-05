@@ -1,16 +1,11 @@
-// handler.js
-
 const bcrypt = require("bcrypt");
 const { nanoid } = require("nanoid");
-const { dbConfig } = require("./config");
+const { dbConfig } = require("../../config/mySqlconfig");
 const mysql = require("mysql2/promise"); // Import mysql2 with promise support
 const jwt = require("jsonwebtoken");
-const {
-  preprocessText,
-  predictValidity,
+const {predictValidity
 } = require("../services/inferenceService");
 
-const books = require("./books");
 const { verifyToken } = require("./middleware");
 
 require("dotenv").config();
@@ -60,10 +55,11 @@ const registerHandler = async (request, h) => {
     } while (!(await isUniqueId(userId, connection)));
 
     const hashedPassword = await hashPassword(password);
+    const createdAt = new Date().toISOString();
 
     await connection.execute(
-      "INSERT INTO users (userId, name, email, password) VALUES (?, ?, ?, ?)",
-      [userId, name, email, hashedPassword]
+      "INSERT INTO users (userId, name, email, password, createdAt) VALUES (?, ?, ?, ?, ?)",
+      [userId, name, email, hashedPassword, createdAt]
     );
 
     const response = h.response({
@@ -171,13 +167,13 @@ const postPredictHandler = async (request, h) => {
   }
 
   try {
-    // Preprocess the text
-    const tensor = preprocessText(text, tokenizer);
+    // // Preprocess the text
+    // const tensor = preprocessText(text, tokenizer);
 
     // Make predictions
-    const { result, description, boolResult } = await predictValidity(
+    const { valueResult, score, description } = await predictValidity(
       model,
-      tensor
+      text
     );
 
     const id = nanoid(25);
@@ -185,9 +181,9 @@ const postPredictHandler = async (request, h) => {
 
     const data = {
       id: id,
-      result: result,
+      result: valueResult,
+      score: score,
       description: description,
-      boolResult: boolResult,
       createdAt: createdAt,
     };
 
@@ -209,9 +205,80 @@ const postPredictHandler = async (request, h) => {
 };
 
 // News Handler
+
+const { storage, bucketName, thumbnailFolder } = require("../../config/gcsConfig");
+
+
+ 
+// Fungsi untuk membuat bucket jika tidak ditemukan.
+async function getOrCreateBucket(bucketName) {
+    const bucket = storage.bucket(bucketName);
+    try {
+        // Mendapatkan informasi bucket jika ada.
+        const [metadata] = await bucket.getMetadata();
+        console.log(`Bucket ${metadata.name} sudah tersedia!`);
+        return bucket;
+    } catch(error) {
+        const optionsCreateBucket = {
+            location: 'ASIA-SOUTHEAST2'
+        }
+        // Create Bucket
+        await storage.createBucket(bucketName, optionsCreateBucket);
+        console.log(`${bucketName} bucket created successfully`);
+        return bucket;
+    }
+}
+ 
+// Fungsi upload single object
+async function upload(bucket, fileName, image) {
+    try {
+        const customMetadata = {
+            contentType: 'image/jpeg, image/png',
+            metadata: {
+                type: "thumbnail"
+            }
+        };
+    
+        const optionsUploadObject = {
+            destination: `${thumbnailFolder}/${fileName}`,
+            metadata: customMetadata
+        };
+    
+        await storage.bucket(bucketName).upload(image, optionsUploadObject);
+        console.log(`${image} uploaded to ${bucketName} bucket`);
+    } catch(uploadError) {
+        console.error(`Gagal mengupload ${image}:`, uploadError.message);
+    }
+}
+ 
+
+
+// async function uploadImageToGCS(imageFile) {
+//   const uniqueFileName = `${Date.now()}-${imageFile.filename}`; // Generate unique filename
+//   const publicUrl = `https://storage.googleapis.com/${bucketName}/${thumbnailFolder}/${uniqueFileName}`; // Public URL format
+
+//   const blob = storage.bucket(bucketName).file(`${thumbnailFolder}/${uniqueFileName}`);
+//   const stream = blob.createWriteStream({
+//     metadata: {
+//       contentType: imageFile.headers.contentType,
+//     },
+//   });
+
+//   return new Promise((resolve, reject) => {
+//     stream.on("error", (err) => {
+//       const uploadError = new Error("Error uploading image to GCS");
+//       uploadError.cause = err; // Store the original error as a cause
+//       reject(uploadError); // Reject with a new error object
+//     });
+//     stream.on("finish", () => resolve(publicUrl));
+//     stream.end(imageFile.data);
+//   });
+// }
+
+
 const addNewsHandler = async (request, h) => {
   try {
-    const { title, tags, body } = request.payload;
+    const { title, tags, body, userId, image } = request.payload;
 
     const connection = await mysql.createConnection(dbConfig);
 
@@ -231,10 +298,25 @@ const addNewsHandler = async (request, h) => {
       updatedAt,
     };
 
+    // Catch Error
+    const path = require('path');
+    const fileName = `${nanoid(12)}-${path.basename(image)}`;
+    getOrCreateBucket(bucketName).then((bucket) => upload(bucket, fileName, image)).catch(console.error)
+    
     await connection.execute(
-      "INSERT INTO news (id, title, tags, body, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
-      [id, title, JSON.stringify(tags), body, createdAt, updatedAt]
+      "INSERT INTO news (newsId, user_id, title, tags, body, createdAt, updatedAt, imageUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [id, userId, title, JSON.stringify(tags), body, createdAt, updatedAt, fileName]
     );
+
+    // if (image) {
+    //   console.log("imageFile:", image); // Log the entire object
+    //   console.log("imageFile.headers.contentType:");
+    //   const imageUrl = await uploadImageToGCS(image); // Call upload function
+    //   await connection.execute(
+    //     "UPDATE news SET imageUrl = ? WHERE id = ?",
+    //     [imageUrl, id]
+    //   ); // Update news table with image URL
+    // }
 
     await connection.end();
     const response = h.response({
