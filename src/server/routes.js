@@ -80,29 +80,6 @@ const routes = [
       pre: [{ method: verifyToken }],
     },
   },
-  
-  // Get all news
-  // {
-  //   method: "GET",
-  //   path: "/news",
-  //   // handler:
-  // },
-  // // RUD news by id
-  // {
-  //   method: "GET",
-  //   path: "/news/{id}",
-  //   // handler:
-  // },
-  // {
-  //   method: "PUT",
-  //   path: "/news/{id}",
-  //   // handler:
-  // },
-  // {
-  //   method: "DELETE",
-  //   path: "/news",
-  //   // handler:
-  // },
 ];
 
 module.exports = routes;
