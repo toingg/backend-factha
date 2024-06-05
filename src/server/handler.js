@@ -1,15 +1,44 @@
+// Import Packages
 const bcrypt = require("bcrypt");
 const { nanoid } = require("nanoid");
-const { dbConfig } = require("../../config/mySqlconfig");
 const mysql = require("mysql2/promise"); // Import mysql2 with promise support
 const jwt = require("jsonwebtoken");
-const {predictValidity
-} = require("../services/inferenceService");
-
-const { verifyToken } = require("./middleware");
-
+const path = require("path");
 require("dotenv").config();
 
+// Import Files
+const { verifyToken } = require("./middleware");
+const { dbConfig } = require("../../config/mySqlconfig");
+const { predictValidity } = require("../services/inferenceService");
+const {
+  storage,
+  bucketName,
+} = require("../../config/gcsConfig");
+
+// Function upload to GCS
+// Fungsi upload single object
+async function upload(bucket, folder, fileName, filePath) {
+  try {
+    const customMetadata = {
+      contentType: "image/jpeg, image/png",
+      metadata: {
+        type: "thumbnail",
+      },
+    };
+
+    const optionsUploadObject = {
+      destination: `${folder}/${fileName}`,
+      metadata: customMetadata,
+    };
+
+    await storage.bucket(bucket).upload(filePath, optionsUploadObject);
+    console.log(`${filePath} uploaded to ${bucket} bucket`);
+  } catch (uploadError) {
+    console.error(`Gagal mengupload ${filePath}:`, uploadError.message);
+  }
+}
+
+// USER AUTH HANDLER
 const JWT_SECRET = process.env.JWT_SECRET_KEY;
 
 const hashPassword = async (password) => {
@@ -19,15 +48,14 @@ const hashPassword = async (password) => {
 };
 
 // functiion to make id always unique generated
-const isUniqueId = async (userId, connection) => {
+const isUniqueId = async (id, connection) => {
   const [results] = await connection.execute(
     "SELECT userId FROM users WHERE userId = ?",
-    [userId]
+    [id]
   );
   return results.length === 0;
 };
 
-// User Handler
 const registerHandler = async (request, h) => {
   const { name, email, password } = request.payload;
 
@@ -56,10 +84,11 @@ const registerHandler = async (request, h) => {
 
     const hashedPassword = await hashPassword(password);
     const createdAt = new Date().toISOString();
+    const updatedAt = createdAt;
 
     await connection.execute(
-      "INSERT INTO users (userId, name, email, password, createdAt) VALUES (?, ?, ?, ?, ?)",
-      [userId, name, email, hashedPassword, createdAt]
+      "INSERT INTO users (userId, name, email, password, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
+      [userId, name, email, hashedPassword, createdAt, updatedAt]
     );
 
     const response = h.response({
@@ -148,6 +177,135 @@ const loginHandler = async (request, h) => {
   }
 };
 
+// News Handler
+
+const addNewsHandler = async (request, h) => {
+  try {
+    const { title, body, userId, filePath } = request.payload;
+
+    const connection = await mysql.createConnection(dbConfig);
+
+    let newsId;
+    do {
+      newsId = nanoid(21);
+    } while (!(await isUniqueId(newsId, connection)));
+    const createdAt = new Date().toISOString();
+    const updatedAt = createdAt;
+    const folderName = 'thumbnail-news';
+
+    const newNews = {
+      newsId,
+      title,
+      body,
+      createdAt,
+      updatedAt,
+    };
+
+    const fileName = `${nanoid(12)}-${path.basename(filePath)}`;
+
+    const uploadResult = await connection.execute(
+      "INSERT INTO news (newsId, user_id, title, body, createdAt, updatedAt, fileName) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [
+        newsId,
+        userId,
+        title,
+        body,
+        createdAt,
+        updatedAt,
+        fileName,
+      ]
+    );
+    if (uploadResult.affectedRows != 1) {
+      await upload(bucketName, folderName, fileName, filePath); // Upload only if insertion succeeds
+    }
+    
+    const imageUrl = `https://storage.googleapis.com/${bucketName}/${folderName}/${fileName}`
+
+    const uploadImageUrl = await connection.execute(
+      'UPDATE news SET imageUrl = ? WHERE newsId = ?',
+      [imageUrl, newsId]
+    );
+
+    await connection.end();
+    const response = h.response({
+      status: "success",
+      message: "Berita berhasil ditambahkan!",
+      data: {
+        news: newNews,
+      },
+    });
+    response.code(201);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: `Berita gagal ditambahkan! : ${error.message}`,
+    });
+    response.code(500);
+    return response;
+  }
+};
+
+const getNewsHandler = async (request, h) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    const [allNews] = await connection.execute("SELECT * FROM news");
+    await connection.end();
+
+    const response = h.response({
+      newsData: allNews,
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: `Berita gagal didapatkan! : ${error.message}`,
+    });
+    response.code(500);
+    return response;
+  }
+};
+
+const getNewsByIdHandler = async (request, h) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    const { id } = request.params;
+
+    const [newsDataById] = await connection.execute(
+      "SELECT * FROM news WHERE id = ?",
+      [id]
+    );
+
+    await connection.end();
+
+    if (newsDataById.length === 0) {
+      const response = h.response({
+        status: "fail",
+        message: "Berita dengan id tersebut tidak ditemukan!",
+      });
+      response.code(404);
+      return response;
+    }
+
+    const response = h.response({
+      status: "success",
+      newsData: newsDataById,
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: "Terjadi kesalahan pada server",
+    });
+    response.code(500);
+    return response;
+  }
+};
+
 // Model Handler
 const tokenizer = {
   // Define your tokenizer methods or properties here
@@ -203,198 +361,6 @@ const postPredictHandler = async (request, h) => {
     return response;
   }
 };
-
-// News Handler
-
-const { storage, bucketName, thumbnailFolder } = require("../../config/gcsConfig");
-
-
- 
-// Fungsi untuk membuat bucket jika tidak ditemukan.
-async function getOrCreateBucket(bucketName) {
-    const bucket = storage.bucket(bucketName);
-    try {
-        // Mendapatkan informasi bucket jika ada.
-        const [metadata] = await bucket.getMetadata();
-        console.log(`Bucket ${metadata.name} sudah tersedia!`);
-        return bucket;
-    } catch(error) {
-        const optionsCreateBucket = {
-            location: 'ASIA-SOUTHEAST2'
-        }
-        // Create Bucket
-        await storage.createBucket(bucketName, optionsCreateBucket);
-        console.log(`${bucketName} bucket created successfully`);
-        return bucket;
-    }
-}
- 
-// Fungsi upload single object
-async function upload(bucket, fileName, image) {
-    try {
-        const customMetadata = {
-            contentType: 'image/jpeg, image/png',
-            metadata: {
-                type: "thumbnail"
-            }
-        };
-    
-        const optionsUploadObject = {
-            destination: `${thumbnailFolder}/${fileName}`,
-            metadata: customMetadata
-        };
-    
-        await storage.bucket(bucketName).upload(image, optionsUploadObject);
-        console.log(`${image} uploaded to ${bucketName} bucket`);
-    } catch(uploadError) {
-        console.error(`Gagal mengupload ${image}:`, uploadError.message);
-    }
-}
- 
-
-
-// async function uploadImageToGCS(imageFile) {
-//   const uniqueFileName = `${Date.now()}-${imageFile.filename}`; // Generate unique filename
-//   const publicUrl = `https://storage.googleapis.com/${bucketName}/${thumbnailFolder}/${uniqueFileName}`; // Public URL format
-
-//   const blob = storage.bucket(bucketName).file(`${thumbnailFolder}/${uniqueFileName}`);
-//   const stream = blob.createWriteStream({
-//     metadata: {
-//       contentType: imageFile.headers.contentType,
-//     },
-//   });
-
-//   return new Promise((resolve, reject) => {
-//     stream.on("error", (err) => {
-//       const uploadError = new Error("Error uploading image to GCS");
-//       uploadError.cause = err; // Store the original error as a cause
-//       reject(uploadError); // Reject with a new error object
-//     });
-//     stream.on("finish", () => resolve(publicUrl));
-//     stream.end(imageFile.data);
-//   });
-// }
-
-
-const addNewsHandler = async (request, h) => {
-  try {
-    const { title, tags, body, userId, image } = request.payload;
-
-    const connection = await mysql.createConnection(dbConfig);
-
-    let id;
-    do {
-      id = nanoid(21);
-    } while (!(await isUniqueId(id, connection)));
-    const createdAt = new Date().toISOString();
-    const updatedAt = createdAt;
-
-    const newNews = {
-      id,
-      title,
-      tags: JSON.stringify(tags),
-      body,
-      createdAt,
-      updatedAt,
-    };
-
-    // Catch Error
-    const path = require('path');
-    const fileName = `${nanoid(12)}-${path.basename(image)}`;
-    getOrCreateBucket(bucketName).then((bucket) => upload(bucket, fileName, image)).catch(console.error)
-    
-    await connection.execute(
-      "INSERT INTO news (newsId, user_id, title, tags, body, createdAt, updatedAt, imageUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [id, userId, title, JSON.stringify(tags), body, createdAt, updatedAt, fileName]
-    );
-
-    // if (image) {
-    //   console.log("imageFile:", image); // Log the entire object
-    //   console.log("imageFile.headers.contentType:");
-    //   const imageUrl = await uploadImageToGCS(image); // Call upload function
-    //   await connection.execute(
-    //     "UPDATE news SET imageUrl = ? WHERE id = ?",
-    //     [imageUrl, id]
-    //   ); // Update news table with image URL
-    // }
-
-    await connection.end();
-    const response = h.response({
-      status: "success",
-      message: "Berita berhasil ditambahkan!",
-      data: {
-        news: newNews,
-      },
-    });
-    response.code(201);
-    return response;
-  } catch (error) {
-    const response = h.response({
-      status: "fail",
-      message: `Berita gagal ditambahkan! : ${error.message}`,
-    });
-    response.code(500);
-    return response;
-  }
-};
-
-const getNewsHandler = async (request, h) => {
-  try {
-    const connection = await mysql.createConnection(dbConfig);
-
-    const [allNews] = await connection.execute("SELECT * FROM news");
-    await connection.end();
-
-    const response = h.response({
-      newsData: allNews,
-    });
-    response.code(200);
-    return response;
-  } catch (error) {
-    const response = h.response({
-      status: "fail",
-      message: `Berita gagal didapatkan! : ${error.message}`,
-    });
-    response.code(500);
-    return response;
-  }
-};
-
-const getNewsByIdHandler = async (request, h) => {
-  try {
-    const connection = await mysql.createConnection(dbConfig);
-
-    const { id } = request.params;
-
-    const [newsDataById] = await connection.execute("SELECT * FROM news WHERE id = ?", [id]);
-
-    await connection.end();
-
-    if (newsDataById.length === 0) {
-      const response = h.response({
-        status: "fail",
-        message: "Berita dengan id tersebut tidak ditemukan!"
-      });
-      response.code(404);
-      return response;
-    }
-
-    const response = h.response({
-      status: "success",
-      newsData: newsDataById,
-    });
-    response.code(200);
-    return response;
-  } catch (error) {
-    const response = h.response({
-      status: "fail",
-      message: "Terjadi kesalahan pada server"
-    });
-    response.code(500);
-    return response;
-  }
-};
-
 module.exports = {
   registerHandler,
   loginHandler,

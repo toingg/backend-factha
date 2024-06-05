@@ -41,7 +41,6 @@ async function predictValidity(model, text) {
             score = Math.max(...validProb)*100;
             description = "Berita FAKTA! / VALID!"
         }
-        const scoraProb = Math.max(...score) * 100;
 
         return { valueResult, score, description};
     } catch (error) {

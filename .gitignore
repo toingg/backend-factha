@@ -6,3 +6,4 @@ package-lock.json
 Dockerfile
 .dockerignore
 factha-credentials.json
+testdb.js
