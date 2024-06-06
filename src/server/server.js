@@ -1,8 +1,7 @@
 const Hapi = require("@hapi/hapi");
 const routes = require("../server/routes");
-const loadModel = require("../services/loadModel");
-const InputError = require('../exceptions/InputError');
-
+const {loadModelAndTokenizer} = require("../services/loadModel");
+const InputError = require("../exceptions/InputError");
 
 (async () => {
   const server = Hapi.server({
@@ -15,8 +14,9 @@ const InputError = require('../exceptions/InputError');
     },
   });
 
-  const model = await loadModel();
+  const { model, tokenizer } = await loadModelAndTokenizer();
   server.app.model = model;
+  server.app.tokenizer = tokenizer;
 
   server.route(routes);
 

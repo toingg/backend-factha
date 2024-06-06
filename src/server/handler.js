@@ -35,6 +35,15 @@ async function upload(bucket, folder, fileName, filePath) {
   }
 }
 
+async function deleteFile(bucketName, folderName, fileName) {
+  try {
+    await storage.bucket(bucketName).file(`${folderName}/${fileName}`).delete();
+    console.log(`File ${fileName} berhasil dihapus dari penyimpanan cloud.`);
+  } catch (error) {
+    console.error(`Gagal menghapus file ${fileName} dari penyimpanan cloud:`, error);
+  }
+}
+
 // USER AUTH HANDLER
 const JWT_SECRET = process.env.JWT_SECRET_KEY;
 
@@ -171,7 +180,7 @@ const loginHandler = async (request, h) => {
   }
 };
 
-const getAllUsers = async (request, h) => {
+const getAllUsersHandler = async (request, h) => {
   try {
     const connection = await mysql.createConnection(dbConfig);
 
@@ -193,10 +202,49 @@ const getAllUsers = async (request, h) => {
   }
 };
 
+const getUserByIdHandler = async (request, h) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    const { id } = request.params;
+
+    const [userDataById] = await connection.execute(
+      "SELECT * FROM users WHERE userId = ?",
+      [id]
+    );
+
+    await connection.end();
+
+    if (userDataById.length === 0) {
+      const response = h.response({
+        status: "fail",
+        message: "User dengan id tersebut tidak ditemukan!",
+      });
+      response.code(404);
+      return response;
+    }
+
+    const response = h.response({
+      status: "success",
+      userData: userDataById,
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: "Terjadi kesalahan pada server",
+    });
+    response.code(500);
+    return response;
+  }
+};
+
 const editUserByIdHandler = async (request, h) => {
   try {
     const { id } = request.params;
-    const { name, email, oldPassword, newPassword, body, filePath} = request.payload;
+    const { name, email, oldPassword, newPassword, body, filePath } =
+      request.payload;
     // filepath for image path for updating user photo profile
 
     const connection = await mysql.createConnection(dbConfig);
@@ -221,12 +269,15 @@ const editUserByIdHandler = async (request, h) => {
     // Debugging liat isi if success kalo mau liat isinya pas fail masukin di if userId apakah ada atas ini
     // console.log(userDataById.length);
     // console.log(userDataById[0]);
-    const folderName = 'profile-picture'
+    const folderName = "profile-picture";
 
-    const isPasswordValid = await bcrypt.compare(oldPassword, userDataById[0].password);
+    const isPasswordValid = await bcrypt.compare(
+      oldPassword,
+      userDataById[0].password
+    );
     if (isPasswordValid) {
       const fileName = `${nanoid(12)}-${path.basename(filePath)}`;
-    
+
       await upload(bucketName, folderName, fileName, filePath); // Upload only if insertion succeeds
       const imageUrl = `https://storage.googleapis.com/${bucketName}/${folderName}/${fileName}`;
       const updatedAt = new Date().toISOString();
@@ -239,8 +290,7 @@ const editUserByIdHandler = async (request, h) => {
     } else {
       const response = h.response({
         status: "fail",
-        message:
-          "Gagal memperbarui user. Password Lama salah !",
+        message: "Gagal memperbarui user. Password Lama salah !",
       });
       response.code(404);
       return response;
@@ -264,12 +314,11 @@ const editUserByIdHandler = async (request, h) => {
   }
 };
 
-
 // News Handler
 
 const addNewsHandler = async (request, h) => {
   try {
-    const { title, body, userId, filePath } = request.payload;
+    const {userId, title, tags, body, filePath } = request.payload;
 
     const connection = await mysql.createConnection(dbConfig);
 
@@ -284,6 +333,7 @@ const addNewsHandler = async (request, h) => {
     const newNews = {
       newsId,
       title,
+      tags,
       body,
       createdAt,
     };
@@ -291,8 +341,8 @@ const addNewsHandler = async (request, h) => {
     const fileName = `${nanoid(12)}-${path.basename(filePath)}`;
 
     const uploadResult = await connection.execute(
-      "INSERT INTO news (newsId, user_id, title, body, createdAt, updatedAt, fileName) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [newsId, userId, title, body, createdAt, updatedAt, fileName]
+      "INSERT INTO news (newsId, user_id, title, tags, body, createdAt, updatedAt, fileName) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [newsId, userId, title, tags, body, createdAt, updatedAt, fileName]
     );
     if (uploadResult.affectedRows != 1) {
       await upload(bucketName, folderName, fileName, filePath); // Upload only if insertion succeeds
@@ -385,32 +435,90 @@ const getNewsByIdHandler = async (request, h) => {
   }
 };
 
-// Model Handler
-const tokenizer = {
-  // Define your tokenizer methods or properties here
-  textsToSequences: function (texts) {
-    // Simulated textsToSequences method
-    return texts.map((text) => text.split(" ")); // Split text into words for simplicity
-  },
+const editNewsByIdHandler = async (request, h) => {
+  try {
+    const { id } = request.params;
+    const { userId, title, tags, body, filePath } = request.payload;
+    // filepath for image path for updating news thumbnail
+
+    const connection = await mysql.createConnection(dbConfig);
+
+    // const [id] = await connection.execute("SELECT * FROM users");
+    const [newsDataById] = await connection.execute(
+      "SELECT * FROM news WHERE newsId = ? AND user_id = ?",
+      [id, userId]
+    );
+
+    // Check userId apakah ada
+    if (newsDataById.length === 0) {
+      // Jika tidak ditemukan, kembalikan respons dengan status fail
+      const response = h.response({
+        status: "fail",
+        message:
+          "Gagal memperbarui berita. berita atau user dengan id tersebut tidak ditemukan",
+      });
+      response.code(404);
+      return response;
+    }
+
+    const folderName = "thumbnail-news";
+    const fileName = `${nanoid(12)}-${path.basename(filePath)}`;
+    const imageUrl = `https://storage.googleapis.com/${bucketName}/${folderName}/${fileName}`;
+    const updatedAt = new Date().toISOString();
+
+    await upload(bucketName, folderName, fileName, filePath);
+
+    if (newsDataById[0].imageUrl) {
+      const oldImageUrl = new URL(newsDataById[0].imageUrl);
+      const oldFileName = path.basename(oldImageUrl.pathname);
+      await deleteFile(bucketName, folderName, oldFileName);
+    }
+    //  Update data berita
+    await connection.execute(
+      "UPDATE news SET title = ?, tags = ?, body = ?, updatedAt = ?, fileName = ?, imageUrl = ? WHERE newsId = ?",
+      [title, tags, body, updatedAt, fileName, imageUrl, id]
+    );
+
+    await connection.end();
+
+    const response = h.response({
+      status: "success",
+      message: "Berita berhasil diperbarui",
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: "Gagal memperbarui berita. Server Error!",
+    });
+    response.code(500);
+    return response;
+  }
 };
+
+// Model Handler
+
+const { loadModelAndTokenizer } = require("../services/loadModel");
 
 const postPredictHandler = async (request, h) => {
   const { text } = request.payload;
-  let model = request.server.app.model;
+  let { model, tokenizer } = request.server.app;
 
-  if (!model) {
-    model = await loadModel();
+  if (!model || !tokenizer) {
+    const loaded = await loadModelAndTokenizer();
+    model = loaded.model;
+    tokenizer = loaded.tokenizer;
     request.server.app.model = model;
+    request.server.app.tokenizer = tokenizer;
   }
 
   try {
-    // // Preprocess the text
-    // const tensor = preprocessText(text, tokenizer);
-
     // Make predictions
     const { valueResult, score, description } = await predictValidity(
       model,
-      text
+      text,
+      tokenizer
     );
 
     const id = nanoid(25);
@@ -440,13 +548,16 @@ const postPredictHandler = async (request, h) => {
     return response;
   }
 };
+
 module.exports = {
   registerHandler,
   loginHandler,
-  getAllUsers,
+  getAllUsersHandler,
+  getUserByIdHandler,
   editUserByIdHandler,
   addNewsHandler,
   getNewsHandler,
   getNewsByIdHandler,
+  editNewsByIdHandler,
   postPredictHandler,
 };

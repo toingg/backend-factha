@@ -1,51 +1,64 @@
-const tf = require("@tensorflow/tfjs");
+const tf = require('@tensorflow/tfjs');
 const InputError = require("../exceptions/InputError");
 
-// Function to preprocess the text input
-// function preprocessText(text, tokenizer) {
-//     // Tokenize the text input
-//     let sequences = tokenizer.textsToSequences([text])[0]; // Extract sequences from array
-//     console.log('Sequences:', sequences);
-    
-//     // Convert sequences to numeric tensor
-//     const numericTensor = tf.tensor2d([sequences.map(word => tokenizer.wordIndex[word] || 0)]); // Convert words to indices
-    
-//     // Pad the sequences to a fixed length (e.g., 224)
-//     const paddedTensor = tf.pad(numericTensor, [[0, 0], [0, 224 - sequences.length]], 0); // Adjust padding
-    
-//     // Convert to tensor and expand dimensions
-//     const tensor = paddedTensor.expandDims(0).toFloat();
-//     return tensor;
-// }
+function preprocessText(text, tokenizer) {
+    // Tokenize the text input
+    let sequences = text.split(' ').map(word => {
+        if (!tokenizer.wordIndex[word]) {
+            tokenizer.wordIndex[word] = Object.keys(tokenizer.wordIndex).length + 1; // Assign new index
+        }
+        return tokenizer.wordIndex[word];
+    });
+
+    console.log('Sequences:', sequences);
+
+    // Convert sequences to numeric tensor
+    const numericTensor = tf.tensor2d([sequences]); // Convert words to indices
+
+    // Pad the sequences to a fixed length (e.g., 1076)
+    const paddedLength = 1076; // Adjust this length based on your model's requirement
+    const paddedTensor = tf.pad(numericTensor, [[0, 0], [0, paddedLength - sequences.length]], 0); // Adjust padding
+
+    // Convert to tensor and expand dimensions
+    const tensor = paddedTensor.toFloat();
+    return tensor;
+}
 
 // Function to make predictions
-async function predictValidity(model, text) {
+async function predictValidity(model, text, tokenizer) {
     try {
+        // Preprocess the input text
+        const processedText = preprocessText(text, tokenizer);
+
         // Make predictions
-        const prediction = model.predict(text);
+        const prediction = model.execute({ 'embedding_input': processedText });
+        const predictionArray = await prediction.array();
+        const predictionValue = predictionArray[0][0]; // Assuming binary classification with single output
+
         let valueResult = null;
-        if (prediction == 1){
+        if (predictionValue >= 0.5) {
             valueResult = 1;
         } else {
             valueResult = 0;
         }
 
-        const validProb = 1-prediction;
-        const hoaxProb = prediction;
+        const validProb = 1 - predictionValue;
+        const hoaxProb = predictionValue;
 
-        let score
-        if (valueResult == 1 ){
-            score = Math.max(...hoaxProb)*100;
-            description = "Berita HOAX! / TIDAK VALID"
+        let score;
+        let description;
+        if (valueResult === 1) {
+            score = hoaxProb * 100;
+            description = "Berita HOAX! / TIDAK VALID";
         } else {
-            score = Math.max(...validProb)*100;
-            description = "Berita FAKTA! / VALID!"
+            score = validProb * 100;
+            description = "Berita FAKTA! / VALID!";
         }
 
-        return { valueResult, score, description};
+        return { valueResult, score, description };
     } catch (error) {
         throw new InputError(`Terjadi kesalahan input: ${error.message}`);
     }
 }
 
-module.exports = {predictValidity};
+module.exports = { predictValidity };
