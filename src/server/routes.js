@@ -8,7 +8,8 @@ const {
   editUserByIdHandler,
   getAllUsersHandler,
   getUserByIdHandler,
-  editNewsByIdHandler
+  editNewsByIdHandler,
+  deleteNewsByIdHandler
 } = require("../server/handler");
 
 const { verifyToken } = require("./middleware");
@@ -92,6 +93,14 @@ const routes = [
     method: "PUT",
     path: "/news/{id}",
     handler: editNewsByIdHandler,
+    options: {
+      pre: [{ method: verifyToken }],
+    },
+  },
+  {
+    method: "DELETE",
+    path: "/news/{id}",
+    handler: deleteNewsByIdHandler,
     options: {
       pre: [{ method: verifyToken }],
     },

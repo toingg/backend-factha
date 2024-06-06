@@ -40,7 +40,10 @@ async function deleteFile(bucketName, folderName, fileName) {
     await storage.bucket(bucketName).file(`${folderName}/${fileName}`).delete();
     console.log(`File ${fileName} berhasil dihapus dari penyimpanan cloud.`);
   } catch (error) {
-    console.error(`Gagal menghapus file ${fileName} dari penyimpanan cloud:`, error);
+    console.error(
+      `Gagal menghapus file ${fileName} dari penyimpanan cloud:`,
+      error
+    );
   }
 }
 
@@ -276,12 +279,18 @@ const editUserByIdHandler = async (request, h) => {
       userDataById[0].password
     );
     if (isPasswordValid) {
+      // cek image lama terus di delete
+      if (userDataById[0].imgProfileUrl) {
+        const oldImageUrl = new URL(userDataById[0].imgProfileUrl);
+        const oldFileName = path.basename(oldImageUrl.pathname);
+        await deleteFile(bucketName, folderName, oldFileName);
+      }
       const fileName = `${nanoid(12)}-${path.basename(filePath)}`;
-
       await upload(bucketName, folderName, fileName, filePath); // Upload only if insertion succeeds
       const imageUrl = `https://storage.googleapis.com/${bucketName}/${folderName}/${fileName}`;
       const updatedAt = new Date().toISOString();
       const hashedPassword = await hashPassword(newPassword);
+
       //  Update data user
       await connection.execute(
         "UPDATE users SET name = ?, email = ?, password = ?, body = ?, updatedAt = ?, fileName = ?, imgProfileUrl = ? WHERE userId = ?",
@@ -318,7 +327,7 @@ const editUserByIdHandler = async (request, h) => {
 
 const addNewsHandler = async (request, h) => {
   try {
-    const {userId, title, tags, body, filePath } = request.payload;
+    const { userId, title, tags, body, filePath } = request.payload;
 
     const connection = await mysql.createConnection(dbConfig);
 
@@ -468,6 +477,7 @@ const editNewsByIdHandler = async (request, h) => {
 
     await upload(bucketName, folderName, fileName, filePath);
 
+    // Cek imagenya ada gak kalo ada dihapus
     if (newsDataById[0].imageUrl) {
       const oldImageUrl = new URL(newsDataById[0].imageUrl);
       const oldFileName = path.basename(oldImageUrl.pathname);
@@ -491,6 +501,56 @@ const editNewsByIdHandler = async (request, h) => {
     const response = h.response({
       status: "fail",
       message: "Gagal memperbarui berita. Server Error!",
+    });
+    response.code(500);
+    return response;
+  }
+};
+
+const deleteNewsByIdHandler = async (request, h) => {
+  const { id } = request.params;
+  const { userId } = request.payload;
+
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    // const [id] = await connection.execute("SELECT * FROM users");
+    const [newsDataById] = await connection.execute(
+      "SELECT * FROM news WHERE newsId = ? AND user_id = ?",
+      [id, userId]
+    );
+
+    // Check userId apakah ada
+    if (newsDataById.length === 0) {
+      // Jika tidak ditemukan, kembalikan respons dengan status fail
+      const response = h.response({
+        status: "fail",
+        message:
+          "Gagal menghapus berita. berita atau user dengan id tersebut tidak ditemukan",
+      });
+      response.code(404);
+      return response;
+    }
+
+    const folderName = "thumbnail-news";
+    if (newsDataById[0].imageUrl) {
+      const oldImageUrl = new URL(newsDataById[0].imageUrl);
+      const oldFileName = path.basename(oldImageUrl.pathname);
+      await deleteFile(bucketName, folderName, oldFileName);
+    }
+
+    await connection.execute("DELETE FROM news WHERE newsId = ?", [id]);
+
+    const response = h.response({
+      status: "success",
+      message: "Berita Berhasil Dihapus",
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: "Berita Gagal Dihapus, server error!",
     });
     response.code(500);
     return response;
@@ -559,5 +619,6 @@ module.exports = {
   getNewsHandler,
   getNewsByIdHandler,
   editNewsByIdHandler,
+  deleteNewsByIdHandler,
   postPredictHandler,
 };
