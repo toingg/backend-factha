@@ -557,6 +557,36 @@ const deleteNewsByIdHandler = async (request, h) => {
   }
 };
 
+const searchNewsHandler = async (request, h) => {
+  try {
+    const { keyword } = request.query;
+
+    const connection = await mysql.createConnection(dbConfig);
+
+    const [newsData] = await connection.execute(
+      "SELECT * FROM news WHERE title LIKE ? OR body LIKE ?",
+      [`%${keyword}%`, `%${keyword}%`]
+    );
+
+    await connection.end();
+
+    const response = h.response({
+      status: "success",
+      message: "Pencarian berhasil",
+      data: newsData,
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: "Gagal melakukan pencarian. Server Error!",
+    });
+    response.code(500);
+    return response;
+  }
+};
+
 // Model Handler
 
 const { loadModelAndTokenizer } = require("../services/loadModel");
@@ -620,5 +650,6 @@ module.exports = {
   getNewsByIdHandler,
   editNewsByIdHandler,
   deleteNewsByIdHandler,
+  searchNewsHandler,
   postPredictHandler,
 };

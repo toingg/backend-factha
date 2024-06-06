@@ -9,7 +9,8 @@ const {
   getAllUsersHandler,
   getUserByIdHandler,
   editNewsByIdHandler,
-  deleteNewsByIdHandler
+  deleteNewsByIdHandler,
+  searchNewsHandler
 } = require("../server/handler");
 
 const { verifyToken } = require("./middleware");
@@ -101,6 +102,14 @@ const routes = [
     method: "DELETE",
     path: "/news/{id}",
     handler: deleteNewsByIdHandler,
+    options: {
+      pre: [{ method: verifyToken }],
+    },
+  },
+  {
+    method: "GET",
+    path: "/news/search",
+    handler: searchNewsHandler,
     options: {
       pre: [{ method: verifyToken }],
     },
