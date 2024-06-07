@@ -8,7 +8,7 @@ require("dotenv").config();
 
 // Import Files
 const { verifyToken } = require("./middleware");
-const { dbConfig } = require("../../config/mySqlconfig");
+const { dbConfig } = require("../../config/mySqlConfig");
 const { predictValidity } = require("../services/inferenceService");
 const { storage, bucketName } = require("../../config/gcsConfig");
 
