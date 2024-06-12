@@ -1,64 +1,49 @@
-const tf = require('@tensorflow/tfjs');
-const InputError = require("../exceptions/InputError");
+const tf = require("@tensorflow/tfjs");
+const { getModel } = require("./loadModel");
 
-function preprocessText(text, tokenizer) {
-    // Tokenize the text input
-    let sequences = text.split(' ').map(word => {
-        if (!tokenizer.wordIndex[word]) {
-            tokenizer.wordIndex[word] = Object.keys(tokenizer.wordIndex).length + 1; // Assign new index
-        }
-        return tokenizer.wordIndex[word];
-    });
+// Preprocess the input text by tokenizing based on space
+const preprocessText = (text, maxLen = 1076) => {
+  const tokens = text.toLowerCase().split(" ");
 
-    console.log('Sequences:', sequences);
+  // Convert tokens to indices (for simplicity, using character codes as indices)
+  const tokenIndices = tokens.map((token) => token.charCodeAt(0));
 
-    // Convert sequences to numeric tensor
-    const numericTensor = tf.tensor2d([sequences]); // Convert words to indices
-
-    // Pad the sequences to a fixed length (e.g., 1076)
-    const paddedLength = 1076; // Adjust this length based on your model's requirement
-    const paddedTensor = tf.pad(numericTensor, [[0, 0], [0, paddedLength - sequences.length]], 0); // Adjust padding
-
-    // Convert to tensor and expand dimensions
-    const tensor = paddedTensor.toFloat();
-    return tensor;
-}
-
-// Function to make predictions
-async function predictValidity(model, text, tokenizer) {
-    try {
-        // Preprocess the input text
-        const processedText = preprocessText(text, tokenizer);
-
-        // Make predictions
-        const prediction = model.execute({ 'embedding_input': processedText });
-        const predictionArray = await prediction.array();
-        const predictionValue = predictionArray[0][0]; // Assuming binary classification with single output
-
-        let valueResult = null;
-        if (predictionValue >= 0.5) {
-            valueResult = 1;
-        } else {
-            valueResult = 0;
-        }
-
-        const validProb = 1 - predictionValue;
-        const hoaxProb = predictionValue;
-
-        let score;
-        let description;
-        if (valueResult === 1) {
-            score = hoaxProb * 100;
-            description = "Berita HOAX! / TIDAK VALID";
-        } else {
-            score = validProb * 100;
-            description = "Berita FAKTA! / VALID!";
-        }
-
-        return { valueResult, score, description };
-    } catch (error) {
-        throw new InputError(`Terjadi kesalahan input: ${error.message}`);
+  // Padding or truncating to ensure consistent length
+  if (tokenIndices.length < maxLen) {
+    const paddedTokens = new Array(maxLen).fill(0);
+    for (let i = 0; i < tokenIndices.length; i++) {
+      paddedTokens[i] = tokenIndices[i];
     }
-}
+    return paddedTokens;
+  } else {
+    return tokenIndices.slice(0, maxLen);
+  }
+};
 
-module.exports = { predictValidity };
+// Perform prediction
+const predict = async (text) => {
+  const model = getModel();
+  if (!model) {
+    throw new Error("Model not loaded");
+  }
+
+  const processedInput = preprocessText(text);
+
+  // Create a tensor from the processed input
+  const inputTensor = tf.tensor2d([processedInput]);
+
+  // Perform the prediction
+  const prediction = await model.executeAsync(inputTensor);
+
+//   console.log("Prediction:", prediction); // Log the prediction for debugging
+
+  // Extract the single value from the prediction tensor
+  const faktaScore = prediction.arraySync()[0][0]; // Extract the single value
+
+  const hoaxScore = 1 - faktaScore;
+//   console.log("Hoax Score:", hoaxScore);
+//   console.log("Fakta Score:", faktaScore);
+  return { hoaxScore, faktaScore };
+};
+
+module.exports = { predict };

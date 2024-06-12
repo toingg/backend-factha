@@ -1,7 +1,6 @@
 const {
   registerHandler,
   loginHandler,
-  postPredictHandler,
   addNewsHandler,
   getNewsHandler,
   getNewsByIdHandler,
@@ -10,25 +9,13 @@ const {
   getUserByIdHandler,
   editNewsByIdHandler,
   deleteNewsByIdHandler,
-  searchNewsHandler
+  searchNewsHandler,
+  predictHandler,
 } = require("../server/handler");
 
 const { verifyToken } = require("./middleware");
 
 const routes = [
-  {
-    path: "/predict",
-    method: "POST",
-    handler: postPredictHandler,
-    // options: {
-    //   payload: {
-    //     /*Mengizinkan data berupa gambar*/
-    //     allow: "multipart/form-data",
-    //     multipart: true,
-    //   },
-    // },
-  },
-
   // USER ROUTES
   {
     method: "POST",
@@ -57,8 +44,8 @@ const routes = [
     },
   },
   {
-    method: 'PUT',
-    path: '/users/{id}',
+    method: "PUT",
+    path: "/users/{id}",
     handler: editUserByIdHandler,
     options: {
       pre: [{ method: verifyToken }],
@@ -113,6 +100,13 @@ const routes = [
     options: {
       pre: [{ method: verifyToken }],
     },
+  },
+
+  // PREDICT ROUTES
+  {
+    path: "/predict",
+    method: "POST",
+    handler: predictHandler,
   },
 ];
 

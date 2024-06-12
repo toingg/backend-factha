@@ -8,7 +8,7 @@ require("dotenv").config();
 // Import Files
 const { verifyToken } = require("./middleware");
 const { dbConfig } = require("../../config/mySqlConfig");
-const { predictValidity } = require("../services/inferenceService");
+const { predict } = require("../services/inferenceService");
 
 // USER AUTH HANDLER
 const JWT_SECRET = process.env.JWT_SECRET_KEY;
@@ -508,53 +508,39 @@ const searchNewsHandler = async (request, h) => {
 
 // Model Handler
 
-const { loadModelAndTokenizer } = require("../services/loadModel");
-
-const postPredictHandler = async (request, h) => {
-  const { text } = request.payload;
-  let { model, tokenizer } = request.server.app;
-
-  if (!model || !tokenizer) {
-    const loaded = await loadModelAndTokenizer();
-    model = loaded.model;
-    tokenizer = loaded.tokenizer;
-    request.server.app.model = model;
-    request.server.app.tokenizer = tokenizer;
-  }
-
+const predictHandler = async (request, h) => {
   try {
-    // Make predictions
-    const { valueResult, score, description } = await predictValidity(
-      model,
-      text,
-      tokenizer
-    );
+    const { text } = request.payload;
+    // console.log('Received text:', text); // Logging input text for debugging
+    const { hoaxScore, faktaScore } = await predict(text);
 
-    const id = nanoid(25);
-    const createdAt = new Date().toISOString();
+    let prediksi;
+    if (hoaxScore > faktaScore) {
+      prediksi = "Berita Hoax / Tidak Valid !";
+    } else if (hoaxScore < faktaScore) {
+      prediksi = "Berita Fakta / Valid !";
+    } else {
+      prediksi = "Yo Ndak Tau Kok Tanya Saya";
+    }
 
-    const data = {
-      id: id,
-      result: valueResult,
-      score: score,
-      description: description,
-      createdAt: createdAt,
+    const predictData = {
+      prediksi,
+      hoaxScore,
+      faktaScore,
     };
+
+    // console.log("Prediction Data:", predictData); // Logging prediction data for debugging
 
     const response = h.response({
       status: "success",
-      message: "Model prediction successful",
-      data,
+      message: "Berita berhasil di prediksi",
+      data: predictData,
     });
-    response.code(201);
+    response.code(200);
     return response;
   } catch (error) {
-    const response = h.response({
-      status: "fail",
-      message: error.message, // Pass the error message directly
-    });
-    response.code(400);
-    return response;
+    console.error("Prediction error:", error);
+    return h.response({ error: "Prediction failed" }).code(500);
   }
 };
 
@@ -570,5 +556,5 @@ module.exports = {
   editNewsByIdHandler,
   deleteNewsByIdHandler,
   searchNewsHandler,
-  postPredictHandler,
+  predictHandler,
 };

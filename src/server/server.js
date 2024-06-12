@@ -2,8 +2,9 @@ require("dotenv").config();
 
 const Hapi = require("@hapi/hapi");
 const routes = require("../server/routes");
-const { loadModelAndTokenizer } = require("../services/loadModel");
+// const { loadModelAndTokenizer } = require("../services/loadModel");
 const InputError = require("../exceptions/InputError");
+const { loadModel } = require("../services/loadModel");
 
 (async () => {
   const server = Hapi.server({
@@ -16,9 +17,7 @@ const InputError = require("../exceptions/InputError");
     },
   });
 
-  const { model, tokenizer } = await loadModelAndTokenizer();
-  server.app.model = model;
-  server.app.tokenizer = tokenizer;
+  await loadModel();
 
   server.route(routes);
 
