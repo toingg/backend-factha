@@ -274,7 +274,7 @@ const editUserByIdHandler = async (request, h) => {
   }
 };
 
-// News Handler
+// NEWS HANDLER
 
 const addNewsHandler = async (request, h) => {
   try {
@@ -297,9 +297,21 @@ const addNewsHandler = async (request, h) => {
       createdAt,
     };
 
+    // Predict News
+    const { hoaxScore, faktaScore } = await predict(body);
+
+    let prediksi;
+    if (hoaxScore > faktaScore) {
+      prediksi = 1;
+    } else if (hoaxScore < faktaScore) {
+      prediksi = 0;
+    } else {
+      prediksi = null;
+    }
+
     const uploadResult = await connection.execute(
-      "INSERT INTO news (newsId, user_id, title, tags, body, createdAt, updatedAt, imageB64) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [newsId, userId, title, tags, body, createdAt, updatedAt, image]
+      "INSERT INTO news (newsId, user_id, title, tags, body, createdAt, updatedAt, hoax, hoaxScore, validScore, imageB64) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [newsId, userId, title, tags, body, , createdAt, updatedAt, prediksi, hoaxScore, faktaScore, image]
     );
 
     await connection.end();
@@ -408,11 +420,22 @@ const editNewsByIdHandler = async (request, h) => {
     }
 
     const updatedAt = new Date().toISOString();
+    
+    const { hoaxScore, faktaScore } = await predict(body);
+
+    let prediksi;
+    if (hoaxScore > faktaScore) {
+      prediksi = 1;
+    } else if (hoaxScore < faktaScore) {
+      prediksi = 0;
+    } else {
+      prediksi = null;
+    }
 
     //  Update data berita
     await connection.execute(
-      "UPDATE news SET title = ?, tags = ?, body = ?, updatedAt = ?, imageB64 = ? WHERE newsId = ?",
-      [title, tags, body, updatedAt, image, id]
+      "UPDATE news SET title = ?, tags = ?, body = ?, updatedAt = ?, hoax = ?, hoaxScore = ?, validScore = ?, imageB64 = ? WHERE newsId = ?",
+      [title, tags, body, updatedAt, prediksi, hoaxScore, faktaScore, image, id]
     );
 
     await connection.end();
@@ -506,7 +529,7 @@ const searchNewsHandler = async (request, h) => {
   }
 };
 
-// Model Handler
+// MODEL HANDLER
 
 const predictHandler = async (request, h) => {
   try {
