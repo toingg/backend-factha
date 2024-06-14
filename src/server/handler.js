@@ -106,7 +106,7 @@ const loginHandler = async (request, h) => {
         const token = jwt.sign(
           { userId: user.id, email: user.email, name: user.name },
           JWT_SECRET,
-          { expiresIn: "1h" } // Token expires in 1 hour
+          { expiresIn: "72h" } // Token expires in 72 hour / 3 hari
         );
 
         const response = h.response({
@@ -292,8 +292,6 @@ const addNewsHandler = async (request, h) => {
     const createdAt = new Date().toISOString();
     const updatedAt = createdAt;
 
-    
-
     // Predict News
     const { hoaxScore, faktaScore } = await predict(body);
 
@@ -319,7 +317,19 @@ const addNewsHandler = async (request, h) => {
 
     const uploadResult = await connection.execute(
       "INSERT INTO news (newsId, user_id, title, tags, body, createdAt, updatedAt, hoax, hoaxScore, validScore, imageB64) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [newsId, userId, title, tags, body, , createdAt, updatedAt, prediksi, hoaxScore, faktaScore, image]
+      [
+        newsId,
+        userId,
+        title,
+        tags,
+        body,
+        createdAt,
+        updatedAt,
+        prediksi,
+        hoaxScore,
+        faktaScore,
+        image,
+      ]
     );
 
     await connection.end();
@@ -431,7 +441,7 @@ const editNewsByIdHandler = async (request, h) => {
     }
 
     const updatedAt = new Date().toISOString();
-    
+
     const { hoaxScore, faktaScore } = await predict(body);
 
     let prediksi;
@@ -464,7 +474,7 @@ const editNewsByIdHandler = async (request, h) => {
     const response = h.response({
       status: "success",
       message: "Berita berhasil diperbarui",
-      newsData: newNews
+      newsData: newNews,
     });
     response.code(200);
     return response;
@@ -589,6 +599,157 @@ const predictHandler = async (request, h) => {
   }
 };
 
+// SAVE NEWS HANDLER
+const saveNewsHandler = async (request, h) => {
+  const { userId, newsId } = request.payload;
+
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    // Validation
+    const [userDataById] = await connection.execute(
+      "SELECT * FROM users WHERE userId = ?",
+      [userId]
+    );
+
+    const [newsDataById] = await connection.execute(
+      "SELECT * FROM news WHERE newsId = ?",
+      [newsId]
+    );
+
+    if (userDataById.length === 0) {
+      const response = h.response({
+        status: "fail",
+        message: "User dengan id tersebut tidak ditemukan!",
+      });
+      response.code(404);
+      return response;
+    } else if (newsDataById.length === 0) {
+      const response = h.response({
+        status: "fail",
+        message: "Berita dengan id tersebut tidak ditemukan!",
+      });
+      response.code(404);
+      return response;
+    }
+
+    let id;
+
+    do {
+      id = nanoid(11);
+    } while (!(await isUniqueId(id, connection)));
+
+    const createdAt = new Date().toISOString();
+
+    const uploadResult = await connection.execute(
+      "INSERT INTO saved_news (id, user_id, news_id, createdAt) VALUES (?, ?, ?, ?)",
+      [id, userId, newsId, createdAt]
+    );
+
+    await connection.end();
+
+    const savedData = {
+      id,
+      userId,
+      newsId,
+      createdAt,
+    };
+    const response = h.response({
+      status: "success",
+      message: "Berita berhasil disimpan!",
+      data: {
+        data: savedData,
+      },
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: `Gagal menyimpan berita, server error!: ${error.message}`,
+    });
+    response.code(500);
+    return response;
+  }
+};
+
+const getSavedNewsByUserIdHandler = async (request, h) => {
+  const { userId } = request.params;
+
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    const [userDataById] = await connection.execute(
+      "SELECT * FROM users WHERE userId = ?",
+      [userId]
+    );
+
+    if (userDataById.length === 0) {
+      const response = h.response({
+        status: "fail",
+        message: "User dengan id tersebut tidak ditemukan!",
+      });
+      response.code(404);
+      return response;
+    }
+
+    const [savedNewsData] = await connection.execute(
+      "SELECT id, news_id FROM saved_news WHERE user_id = ?",
+      [userId]
+    );
+
+    const response = h.response({
+      status: "success",
+      message: "Berita yang disimpan berhasil didapatkan",
+      data: savedNewsData,
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: `Berita yang disimpan gagal didapatkan. Server error: ${error.message}`,
+    });
+  }
+};
+
+const deleteSavedNewsByIdHandler = async (request, h) => {
+  const { id } = request.params;
+
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    const [savedNewsId] = await connection.execute(
+      "SELECT * FROM saved_news WHERE id = ?",
+      [id]
+    );
+    if (savedNewsId.length === 0) {
+      // Jika tidak ditemukan, kembalikan respons dengan status fail
+      const response = h.response({
+        status: "fail",
+        message:
+          "Gagal menghapus berita. Berita yang disimpan dengan id tersebut tidak ditemukan",
+      });
+      response.code(404);
+      return response;
+    }
+
+    await connection.execute("DELETE FROM saved_news WHERE id = ?", [id]);
+
+    const response = h.response({
+      status: "success",
+      message: "Berita yang disimpan berhasil dihapus",
+    });
+    response.code(200);
+    return response;
+  } catch (error) {
+    const response = h.response({
+      status: "fail",
+      message: `Berita yang disimpan gagal dihapus. Server error: ${error.message}`,
+    });
+  }
+};
+
 module.exports = {
   registerHandler,
   loginHandler,
@@ -602,4 +763,7 @@ module.exports = {
   deleteNewsByIdHandler,
   searchNewsHandler,
   predictHandler,
+  saveNewsHandler,
+  getSavedNewsByUserIdHandler,
+  deleteSavedNewsByIdHandler,
 };
