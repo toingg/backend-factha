@@ -107,6 +107,9 @@ const routes = [
     path: "/predict",
     method: "POST",
     handler: predictHandler,
+    options: {
+      pre: [{ method: verifyToken }],
+    },
   },
 ];
 

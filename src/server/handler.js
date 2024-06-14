@@ -42,7 +42,7 @@ const registerHandler = async (request, h) => {
     if (emailResults.length > 0) {
       const response = h.response({
         status: "fail",
-        message: "Email already exists!",
+        message: "Email telah dipakai!",
       });
       response.code(409);
       return response;
@@ -65,7 +65,7 @@ const registerHandler = async (request, h) => {
 
     const response = h.response({
       status: "success",
-      message: "User registered successfully!",
+      message: "User berhasil didaftarkan!",
       data: {
         userId: userId,
         name: name,
@@ -77,7 +77,7 @@ const registerHandler = async (request, h) => {
   } catch (error) {
     const response = h.response({
       status: "fail",
-      message: `Error registering user: Server error!: ${error.message}`,
+      message: `Error mendaftarkan user: Server error!: ${error.message}`,
     });
     response.code(500);
     return response;
@@ -111,7 +111,7 @@ const loginHandler = async (request, h) => {
 
         const response = h.response({
           status: "success",
-          message: "Login successfully!",
+          message: "Login berhasil!",
           data: {
             userId: user.userId,
             name: user.name,
@@ -123,7 +123,7 @@ const loginHandler = async (request, h) => {
       } else {
         const response = h.response({
           status: "fail",
-          message: "Invalid email or password",
+          message: "Email atau Password salah!",
         });
         response.code(401);
         return response;
@@ -131,7 +131,7 @@ const loginHandler = async (request, h) => {
     } else {
       const response = h.response({
         status: "fail",
-        message: "User not found",
+        message: "User tidak ditemukan",
       });
       response.code(404);
       return response;
@@ -154,7 +154,9 @@ const getAllUsersHandler = async (request, h) => {
     await connection.end();
 
     const response = h.response({
-      users: allUsers,
+      status: "success",
+      message: "Users berhasil didapatkan",
+      userData: allUsers,
     });
     response.code(200);
     return response;
@@ -192,6 +194,7 @@ const getUserByIdHandler = async (request, h) => {
 
     const response = h.response({
       status: "success",
+      message: "User berhasil didapatkan!",
       userData: userDataById,
     });
     response.code(200);
@@ -289,13 +292,7 @@ const addNewsHandler = async (request, h) => {
     const createdAt = new Date().toISOString();
     const updatedAt = createdAt;
 
-    const newNews = {
-      newsId,
-      title,
-      tags,
-      body,
-      createdAt,
-    };
+    
 
     // Predict News
     const { hoaxScore, faktaScore } = await predict(body);
@@ -309,6 +306,17 @@ const addNewsHandler = async (request, h) => {
       prediksi = null;
     }
 
+    const newNews = {
+      newsId,
+      title,
+      tags,
+      body,
+      createdAt,
+      prediksi,
+      hoaxScore,
+      faktaScore,
+    };
+
     const uploadResult = await connection.execute(
       "INSERT INTO news (newsId, user_id, title, tags, body, createdAt, updatedAt, hoax, hoaxScore, validScore, imageB64) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [newsId, userId, title, tags, body, , createdAt, updatedAt, prediksi, hoaxScore, faktaScore, image]
@@ -319,7 +327,7 @@ const addNewsHandler = async (request, h) => {
       status: "success",
       message: "Berita berhasil ditambahkan!",
       data: {
-        news: newNews,
+        newsData: newNews,
       },
     });
     response.code(201);
@@ -342,6 +350,8 @@ const getNewsHandler = async (request, h) => {
     await connection.end();
 
     const response = h.response({
+      status: "success",
+      message: "Berita berhasil didapatkan",
       newsData: allNews,
     });
     response.code(200);
@@ -380,6 +390,7 @@ const getNewsByIdHandler = async (request, h) => {
 
     const response = h.response({
       status: "success",
+      message: "Berita berhasil didapatkan",
       newsData: newsDataById,
     });
     response.code(200);
@@ -431,6 +442,16 @@ const editNewsByIdHandler = async (request, h) => {
     } else {
       prediksi = null;
     }
+    const newNews = {
+      newsId,
+      title,
+      tags,
+      body,
+      updatedAt,
+      prediksi,
+      hoaxScore,
+      faktaScore,
+    };
 
     //  Update data berita
     await connection.execute(
@@ -443,6 +464,7 @@ const editNewsByIdHandler = async (request, h) => {
     const response = h.response({
       status: "success",
       message: "Berita berhasil diperbarui",
+      newsData: newNews
     });
     response.code(200);
     return response;
@@ -514,8 +536,8 @@ const searchNewsHandler = async (request, h) => {
 
     const response = h.response({
       status: "success",
-      message: "Pencarian berhasil",
-      data: newsData,
+      message: "Pencarian berita berhasil",
+      newsData: newsData,
     });
     response.code(200);
     return response;
