@@ -453,7 +453,7 @@ const editNewsByIdHandler = async (request, h) => {
       prediksi = null;
     }
     const newNews = {
-      newsId,
+      id,
       title,
       tags,
       body,
