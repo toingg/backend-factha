@@ -736,6 +736,8 @@ const deleteSavedNewsByIdHandler = async (request, h) => {
 
     await connection.execute("DELETE FROM saved_news WHERE id = ?", [id]);
 
+    await connection.end();
+
     const response = h.response({
       status: "success",
       message: "Berita yang disimpan berhasil dihapus",
@@ -747,6 +749,8 @@ const deleteSavedNewsByIdHandler = async (request, h) => {
       status: "fail",
       message: `Berita yang disimpan gagal dihapus. Server error: ${error.message}`,
     });
+    response.code(500);
+    return response;
   }
 };
 
