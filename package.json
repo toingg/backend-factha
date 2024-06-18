@@ -12,7 +12,6 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@google-cloud/storage": "^7.11.1",
     "@hapi/hapi": "^21.3.9",
     "@tensorflow/tfjs": "^4.20.0",
     "bcrypt": "^5.1.1",
